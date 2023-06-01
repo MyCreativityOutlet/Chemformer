@@ -9,3 +9,6 @@ saved_models/
 notebooks/data/
 notebooks/.ipynb_checkpoints/
 notebooks/playground.ipynb
+/molbart/data/seq-to-seq_datasets/
+/molbart/data/zinc/
+/molbart/models/pre-trained/
