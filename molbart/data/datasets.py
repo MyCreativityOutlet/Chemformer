@@ -203,6 +203,26 @@ class UsptoSep(ReactionDataset):
         return react_str, prod_str
 
 
+class Envipath(ReactionDataset):
+    def __init__(self, data_path, aug_prob):
+        path = Path(data_path)
+        df = pd.read_pickle(path)
+        reactants = df["reactants_mol"].tolist()
+        products = df["products_mol"].tolist()
+
+        super().__init__(reactants, products, transform=self._prepare_strings, aug_prob=aug_prob)
+
+        self.aug_prob = aug_prob
+        self.train_idxs, self.val_idxs, self.test_idxs = self._save_idxs(df)
+
+    def _prepare_strings(self, react, prod):
+        react_str = Chem.MolToSmiles(react, canonical=False)
+        prod_str = Chem.MolToSmiles(prod, canonical=False)
+        #  react_str = self._augment_to_smiles(react)
+        #  prod_str = self._augment_to_smiles(prod)
+        return react_str, prod_str
+
+
 class MolOpt(ReactionDataset):
     def __init__(self, data_path, aug_prob):
         path = Path(data_path)

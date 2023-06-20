@@ -1,3 +1,4 @@
+import json
 import math
 import torch
 import torch.nn as nn
@@ -18,24 +19,8 @@ from molbart.models.util import (
 
 
 class _AbsTransformerModel(pl.LightningModule):
-    def __init__(
-        self,
-        pad_token_idx,
-        vocab_size, 
-        d_model,
-        num_layers, 
-        num_heads,
-        d_feedforward,
-        lr,
-        weight_decay,
-        activation,
-        num_steps,
-        max_seq_len,
-        schedule,
-        warm_up_steps,
-        dropout=0.1,
-        **kwargs
-    ):
+    def __init__(self, pad_token_idx, vocab_size, d_model, num_layers, num_heads, d_feedforward, lr, weight_decay,
+                 activation, num_steps, max_seq_len, schedule, warm_up_steps, dropout=0.1, **kwargs):
         super().__init__()
 
         self.pad_token_idx = pad_token_idx
@@ -53,6 +38,8 @@ class _AbsTransformerModel(pl.LightningModule):
         self.warm_up_steps = warm_up_steps
         self.dropout = dropout
         self.val_batch_outputs = []
+        self.test_batch_outputs = []
+        self.test_predictions = {"actual": [], "prediction": []}
 
         if self.schedule == "transformer":
             assert warm_up_steps is not None, "A value for warm_up_steps is required for transformer LR schedule"
@@ -63,7 +50,7 @@ class _AbsTransformerModel(pl.LightningModule):
         # These must be set by subclasses
         self.sampler = None
         self.val_sampling_alg = "greedy"
-        self.test_sampling_alg = "beam"
+        self.test_sampling_alg = "greedy"
         self.num_beams = 10
 
         self.emb = nn.Embedding(vocab_size, d_model, padding_idx=pad_token_idx)
@@ -122,17 +109,21 @@ class _AbsTransformerModel(pl.LightningModule):
         metrics = self.sampler.calc_sampling_metrics(mol_strs, target_smiles)
 
         mol_acc = torch.tensor(metrics["accuracy"], device=loss.device)
+        finger_sim = torch.tensor(metrics["finger_similarity"], device=loss.device)
         invalid = torch.tensor(metrics["invalid"], device=loss.device)
 
         # Log for prog bar only
         self.log("mol_acc", mol_acc, prog_bar=True, logger=False, sync_dist=True, batch_size=len(target_smiles))
+        self.log("finger_sim", finger_sim, prog_bar=True, logger=False, sync_dist=True, batch_size=len(target_smiles))
+        self.log("invalid_smiles", invalid, prog_bar=True, logger=False, sync_dist=True, batch_size=len(target_smiles))
 
         val_outputs = {
             "val_loss": loss,
             "val_token_acc": token_acc,
             "perplexity": perplexity,
             "val_molecular_accuracy": mol_acc,
-            "val_invalid_smiles": invalid
+            "val_invalid_smiles": invalid,
+            "val_finger_sim": finger_sim
         }
         self.val_batch_outputs.append(val_outputs)
         return val_outputs
@@ -152,13 +143,18 @@ class _AbsTransformerModel(pl.LightningModule):
         token_acc = self._calc_token_acc(batch, model_output)
         perplexity = self._calc_perplexity(batch, model_output)
         mol_strs, log_lhs = self.sample_molecules(batch, sampling_alg=self.test_sampling_alg)
+        print(f"Test output type: {type(mol_strs[0])}")
         metrics = self.sampler.calc_sampling_metrics(mol_strs, target_smiles)
+
+        self.test_predictions["actual"].extend(target_smiles)
+        self.test_predictions["prediction"].extend(mol_strs)
 
         test_outputs = {
             "test_loss": loss.item(),
             "test_token_acc": token_acc,
             "test_perplexity": perplexity,
-            "test_invalid_smiles": metrics["invalid"]
+            "test_invalid_smiles": metrics["invalid"],
+            "test_finger_sim": metrics["finger_similarity"]
         }
 
         if self.test_sampling_alg == "greedy":
@@ -174,12 +170,15 @@ class _AbsTransformerModel(pl.LightningModule):
 
         else:
             raise ValueError(f"Unknown test sampling algorithm, {self.test_sampling_alg}")
-
+        self.test_batch_outputs.append(test_outputs)
         return test_outputs
 
-    def test_epoch_end(self, outputs):
-        avg_outputs = self._avg_dicts(outputs)
+    def on_test_epoch_end(self):
+        avg_outputs = self._avg_dicts(self.test_batch_outputs)
+        with open("test_results.json", "w") as output_file:
+            json.dump(self.test_predictions, output_file, indent=4)
         self._log_dict(avg_outputs)
+        self.test_batch_outputs = []
 
     def configure_optimizers(self):
         params = self.parameters()
@@ -320,46 +319,15 @@ class _AbsTransformerModel(pl.LightningModule):
 
 
 class BARTModel(_AbsTransformerModel):
-    def __init__(
-        self,
-        decode_sampler,
-        pad_token_idx,
-        vocab_size, 
-        d_model,
-        num_layers, 
-        num_heads,
-        d_feedforward,
-        lr,
-        weight_decay,
-        activation,
-        num_steps,
-        max_seq_len,
-        schedule="cycle",
-        warm_up_steps=None,
-        dropout=0.1,
-        **kwargs
-    ):
-        super().__init__(
-            pad_token_idx,
-            vocab_size, 
-            d_model,
-            num_layers, 
-            num_heads,
-            d_feedforward,
-            lr,
-            weight_decay,
-            activation,
-            num_steps,
-            max_seq_len,
-            schedule,
-            warm_up_steps,
-            dropout,
-            **kwargs
-        )
+    def __init__(self, decode_sampler, pad_token_idx, vocab_size, d_model, num_layers, num_heads, d_feedforward, lr,
+                 weight_decay, activation, num_steps, max_seq_len, schedule="cycle", warm_up_steps=None, dropout=0.1,
+                 **kwargs):
+        super().__init__(pad_token_idx, vocab_size, d_model, num_layers, num_heads, d_feedforward, lr, weight_decay,
+                         activation, num_steps, max_seq_len, schedule, warm_up_steps, dropout, **kwargs)
 
         self.sampler = decode_sampler
         self.val_sampling_alg = "greedy"
-        self.test_sampling_alg = "beam"
+        self.test_sampling_alg = "greedy"
         self.num_beams = 10
 
         enc_norm = nn.LayerNorm(d_model)
@@ -407,20 +375,12 @@ class BARTModel(_AbsTransformerModel):
         tgt_mask = self._generate_square_subsequent_mask(seq_len, device=encoder_embs.device)
 
         memory = self.encoder(encoder_embs, src_key_padding_mask=encoder_pad_mask)
-        model_output = self.decoder(
-            decoder_embs,
-            memory,
-            tgt_mask=tgt_mask,
-            tgt_key_padding_mask=decoder_pad_mask,
-            memory_key_padding_mask=encoder_pad_mask.clone()
-        )
+        model_output = self.decoder(decoder_embs, memory, tgt_mask=tgt_mask, tgt_key_padding_mask=decoder_pad_mask,
+                                    memory_key_padding_mask=encoder_pad_mask.clone())
 
         token_output = self.token_fc(model_output)
 
-        output = {
-            "model_output": model_output,
-            "token_output": token_output
-        }
+        output = {"model_output": model_output, "token_output": token_output}
 
         return output
 
@@ -465,13 +425,8 @@ class BARTModel(_AbsTransformerModel):
         seq_len, _, _ = tuple(decoder_embs.size())
         tgt_mask = self._generate_square_subsequent_mask(seq_len, device=decoder_embs.device)
 
-        model_output = self.decoder(
-            decoder_embs, 
-            memory_input,
-            tgt_key_padding_mask=decoder_pad_mask,
-            memory_key_padding_mask=memory_pad_mask,
-            tgt_mask=tgt_mask
-        )
+        model_output = self.decoder(decoder_embs, memory_input, tgt_key_padding_mask=decoder_pad_mask,
+                                    memory_key_padding_mask=memory_pad_mask, tgt_mask=tgt_mask)
         token_output = self.token_fc(model_output)
         token_probs = self.log_softmax(token_output)
         return token_probs
@@ -555,7 +510,7 @@ class BARTModel(_AbsTransformerModel):
         else:
             raise ValueError(f"Unknown sampling algorithm {sampling_alg}")
 
-        # Must remember to unfreeze!
+        # Must remember to unfreeze!jobs@ecs.vuw.ac.nz
         self.unfreeze()
 
         return mol_strs, log_lhs

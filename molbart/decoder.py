@@ -1,5 +1,5 @@
 import torch
-from rdkit import Chem, RDLogger
+from rdkit import Chem, RDLogger, DataStructs
 
 
 class DecodeSampler:
@@ -400,6 +400,14 @@ class DecodeSampler:
     @staticmethod
     def _calc_greedy_metrics(sampled_smiles, target_smiles):
         sampled_mols = [Chem.MolFromSmiles(smi) for smi in sampled_smiles]
+        target_mols = [Chem.MolFromSmiles(smi) for smi in target_smiles]
+        finger_similarities = []
+        for i in range(len(sampled_mols)):
+            if sampled_mols[i] is not None and target_mols[i] is not None:
+                f_target = Chem.RDKFingerprint(target_mols[i])
+                f_sample = Chem.RDKFingerprint(sampled_mols[i])
+                finger_similarities.append(DataStructs.FingerprintSimilarity(f_target, f_sample))
+        finger_similarity = sum(finger_similarities) / len(finger_similarities)
         invalid = [mol is None for mol in sampled_mols]
 
         canon_smiles = ["Unknown" if mol is None else Chem.MolToSmiles(mol) for mol in sampled_mols]
@@ -412,6 +420,7 @@ class DecodeSampler:
         accuracy = num_correct / total
 
         metrics = {
+            "finger_similarity": finger_similarity,
             "accuracy": accuracy,
             "invalid": perc_invalid
         }

@@ -15,7 +15,7 @@ from lightning_fabric.utilities.seed import seed_everything as s_everything
 
 from molbart.tokeniser import MolEncTokeniser
 from molbart.models.pre_train import BARTModel, UnifiedModel
-from molbart.data.datasets import Chembl, Uspto50, UsptoMixed, UsptoSep, MolOpt, Zinc, ZincSlice
+from molbart.data.datasets import Chembl, Uspto50, UsptoMixed, UsptoSep, MolOpt, Zinc, ZincSlice, Envipath
 from molbart.data.datamodules import MoleculeDataModule, FineTuneReactionDataModule
 
 
@@ -179,6 +179,8 @@ def build_dataset(args, forward=True):
     elif args.dataset == "zinc":
         dataset = Zinc(args.data_path)
         print("Using ZINC dataset.")
+    elif args.dataset == "envipath":
+        dataset = Envipath(args.data_path, aug_prob)
     else:
         raise ValueError(f"Unknown dataset {args.dataset}.")
 

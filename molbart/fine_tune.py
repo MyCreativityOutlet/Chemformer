@@ -170,6 +170,10 @@ def main(args):
     trainer.fit(model, datamodule=dm)
     print("Finished training.")
 
+    print("Running test set")
+    trainer.test(model, datamodule=dm)
+    print("Finished test set")
+
     print("Printing unknown tokens...")
     tokeniser.print_unknown_tokens()
     print("Complete.")
