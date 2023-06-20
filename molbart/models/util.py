@@ -10,7 +10,7 @@ class FuncLR(LambdaLR):
 
 # Use Pytorch implementation but with 'pre-norm' style layer normalisation
 class PreNormEncoderLayer(nn.TransformerEncoderLayer):
-    def forward(self, src, src_mask=None, src_key_padding_mask=None):
+    def forward(self, src, src_mask=None, src_key_padding_mask=None, is_causal=False):
         # Self attention block
         att = self.norm1(src)
         att = self.self_attn(att, att, att, attn_mask=src_mask, key_padding_mask=src_key_padding_mask)[0]
@@ -25,15 +25,8 @@ class PreNormEncoderLayer(nn.TransformerEncoderLayer):
 
 # Use Pytorch implementation but with 'pre-norm' style layer normalisation
 class PreNormDecoderLayer(nn.TransformerDecoderLayer):
-    def forward(
-        self,
-        tgt,
-        memory,
-        tgt_mask=None,
-        memory_mask=None,
-        tgt_key_padding_mask=None,
-        memory_key_padding_mask=None
-    ):
+    def forward(self, tgt, memory, tgt_mask=None, memory_mask=None, tgt_key_padding_mask=None,
+                memory_key_padding_mask=None, memory_is_causal=False, tgt_is_causal=True):
         # Self attention block 
         query = self.norm1(tgt)
         query = self.self_attn(query, query, query, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask)[0]

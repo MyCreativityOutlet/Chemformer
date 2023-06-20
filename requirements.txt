@@ -1,9 +1,9 @@
-torch==1.8.0
-pytest==6.0.2
-pytest-order==0.9.5
-pytorch_lightning==1.2.3
+torch~=2.0.1
+pytest~=7.3.2
+pytest-order~=1.1.0
+pytorch_lightning~=2.0.3
 pandas
 numpy
-optuna==2.3.0
-fairscale==0.3.1
-deepspeed==0.3.12
+optuna~=3.2.0
+fairscale~=0.4.13
+deepspeed~=0.9.4

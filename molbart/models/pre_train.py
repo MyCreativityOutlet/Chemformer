@@ -52,6 +52,7 @@ class _AbsTransformerModel(pl.LightningModule):
         self.schedule = schedule
         self.warm_up_steps = warm_up_steps
         self.dropout = dropout
+        self.val_batch_outputs = []
 
         if self.schedule == "transformer":
             assert warm_up_steps is not None, "A value for warm_up_steps is required for transformer LR schedule"
@@ -104,7 +105,7 @@ class _AbsTransformerModel(pl.LightningModule):
         model_output = self.forward(batch)
         loss = self._calc_loss(batch, model_output)
 
-        self.log("train_loss", loss, on_step=True, logger=True, sync_dist=True)
+        self.log("train_loss", loss, on_step=True, logger=True, sync_dist=True, prog_bar=True, batch_size=batch["encoder_input"].size(1))
 
         return loss
 
@@ -124,7 +125,7 @@ class _AbsTransformerModel(pl.LightningModule):
         invalid = torch.tensor(metrics["invalid"], device=loss.device)
 
         # Log for prog bar only
-        self.log("mol_acc", mol_acc, prog_bar=True, logger=False, sync_dist=True)
+        self.log("mol_acc", mol_acc, prog_bar=True, logger=False, sync_dist=True, batch_size=len(target_smiles))
 
         val_outputs = {
             "val_loss": loss,
@@ -133,11 +134,13 @@ class _AbsTransformerModel(pl.LightningModule):
             "val_molecular_accuracy": mol_acc,
             "val_invalid_smiles": invalid
         }
+        self.val_batch_outputs.append(val_outputs)
         return val_outputs
 
-    def validation_epoch_end(self, outputs):
-        avg_outputs = self._avg_dicts(outputs)
+    def on_validation_epoch_end(self):
+        avg_outputs = self._avg_dicts(self.val_batch_outputs)
         self._log_dict(avg_outputs)
+        self.val_batch_outputs = []
 
     def test_step(self, batch, batch_idx):
         self.eval()
@@ -255,6 +258,7 @@ class _AbsTransformerModel(pl.LightningModule):
 
         mask = (torch.triu(torch.ones((sz, sz), device=device)) == 1).transpose(0, 1)
         mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+        mask = torch.ne(mask, 0)
         return mask
 
     def _init_params(self):

@@ -8,9 +8,10 @@ import pandas as pd
 import pytorch_lightning as pl
 from pathlib import Path
 from pytorch_lightning import Trainer
-from pytorch_lightning.plugins import DeepSpeedPlugin
+from pytorch_lightning.strategies import DeepSpeedStrategy
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, Callback
+from lightning_fabric.utilities.seed import seed_everything as s_everything
 
 from molbart.tokeniser import MolEncTokeniser
 from molbart.models.pre_train import BARTModel, UnifiedModel
@@ -231,16 +232,14 @@ def build_trainer(args):
     checkpoint_cb = ModelCheckpoint(monitor="val_molecular_accuracy", save_last=True)
 
     plugins = None
-    accelerator = None
     if args.gpus > 1:
-        accelerator = "ddp"
         lr_monitor = OptLRMonitor()
-        plugins = [DeepSpeedPlugin(config=args.deepspeed_config_path)]
+        plugins = [DeepSpeedStrategy(config=args.deepspeed_config_path)]
 
     callbacks = [lr_monitor, checkpoint_cb]
 
     # Zinc is so big we need to checkpoint more frequently than every epoch
-    check_val = 10
+    check_val = 5
     if args.dataset == "zinc":
         checkpoint_freq = 50000
         intra_epoch_checkpoint = StepCheckpoint(checkpoint_freq)
@@ -248,12 +247,11 @@ def build_trainer(args):
         check_val = 1
 
     print(f"Num gpus: {args.gpus}")
-    print(f"Accelerator: {accelerator}")
 
     trainer = Trainer(
-        accelerator=accelerator,
+        accelerator="auto",
         logger=logger,
-        gpus=args.gpus,
+        devices=args.gpus,
         num_nodes=args.num_nodes,
         min_epochs=args.epochs,
         max_epochs=args.epochs,
@@ -263,13 +261,13 @@ def build_trainer(args):
         callbacks=callbacks,
         plugins=plugins,
         check_val_every_n_epoch=check_val,
-        precision=16
+        precision="16-mixed"
     )
     return trainer
 
 
 def seed_everything(seed):
-    pl.utilities.seed.seed_everything(seed)
+    s_everything(seed)
 
 
 def load_bart(args, sampler):

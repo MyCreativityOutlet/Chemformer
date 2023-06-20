@@ -1,7 +1,8 @@
 import os
 import argparse
-
+import torch
 import molbart.util as util
+from sys import platform
 from molbart.decoder import DecodeSampler
 from molbart.models.pre_train import BARTModel, UnifiedModel
 
@@ -123,6 +124,7 @@ def load_model(args, sampler, vocab_size, total_steps, pad_token_idx):
 
 
 def main(args):
+    torch.set_float32_matmul_precision('medium')
     util.seed_everything(73)
 
     if args.task in ["forward_prediction", "mol_opt"]:
