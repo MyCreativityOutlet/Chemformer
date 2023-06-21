@@ -39,7 +39,7 @@ class _AbsTransformerModel(pl.LightningModule):
         self.dropout = dropout
         self.val_batch_outputs = []
         self.test_batch_outputs = []
-        self.test_predictions = {"actual": [], "prediction": []}
+        self.test_predictions = {"model_output": []}
 
         if self.schedule == "transformer":
             assert warm_up_steps is not None, "A value for warm_up_steps is required for transformer LR schedule"
@@ -145,9 +145,8 @@ class _AbsTransformerModel(pl.LightningModule):
         mol_strs, log_lhs = self.sample_molecules(batch, sampling_alg=self.test_sampling_alg)
         print(f"Test output type: {type(mol_strs[0])}")
         metrics = self.sampler.calc_sampling_metrics(mol_strs, target_smiles)
-
-        self.test_predictions["actual"].extend(target_smiles)
-        self.test_predictions["prediction"].extend(mol_strs)
+        save_outputs = [{"actual": target_smiles[i], "prediction": mol_strs[i]} for i in range(len(target_smiles))]
+        self.test_predictions["model_output"].extend(save_outputs)
 
         test_outputs = {
             "test_loss": loss.item(),
