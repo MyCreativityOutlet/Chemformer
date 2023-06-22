@@ -407,7 +407,7 @@ class DecodeSampler:
                 f_target = Chem.RDKFingerprint(target_mols[i])
                 f_sample = Chem.RDKFingerprint(sampled_mols[i])
                 finger_similarities.append(DataStructs.FingerprintSimilarity(f_target, f_sample))
-        finger_similarity = sum(finger_similarities) / len(finger_similarities)
+        finger_similarity = sum(finger_similarities) / len(finger_similarities) if len(finger_similarities) > 0 else 0.0
         invalid = [mol is None for mol in sampled_mols]
 
         canon_smiles = ["Unknown" if mol is None else Chem.MolToSmiles(mol) for mol in sampled_mols]
