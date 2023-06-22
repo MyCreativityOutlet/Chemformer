@@ -159,7 +159,7 @@ def main(args):
 
     print("Loading model...")
     model = load_model(args, sampler, vocab_size, train_steps + 1, pad_token_idx)
-    sampler.max_seq_len = model.max_seq_len
+    # sampler.max_seq_len = model.max_seq_len
     print("Finished model.")
 
     print("Building trainer...")

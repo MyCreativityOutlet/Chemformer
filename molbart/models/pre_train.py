@@ -143,7 +143,6 @@ class _AbsTransformerModel(pl.LightningModule):
         token_acc = self._calc_token_acc(batch, model_output)
         perplexity = self._calc_perplexity(batch, model_output)
         mol_strs, log_lhs = self.sample_molecules(batch, sampling_alg=self.test_sampling_alg)
-        print(f"Test output type: {type(mol_strs[0])}")
         metrics = self.sampler.calc_sampling_metrics(mol_strs, target_smiles)
         save_outputs = [{"actual": target_smiles[i], "prediction": mol_strs[i]} for i in range(len(target_smiles))]
         self.test_predictions["model_output"].extend(save_outputs)
@@ -509,7 +508,7 @@ class BARTModel(_AbsTransformerModel):
         else:
             raise ValueError(f"Unknown sampling algorithm {sampling_alg}")
 
-        # Must remember to unfreeze!jobs@ecs.vuw.ac.nz
+        # Must remember to unfreeze!
         self.unfreeze()
 
         return mol_strs, log_lhs
